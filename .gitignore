@@ -1,0 +1,6 @@
+.DS_Store
+watch-bridge/config.json
+watch-bridge/build/
+watch-bridge/logs/
+watch-bridge/.venv/
+reference/

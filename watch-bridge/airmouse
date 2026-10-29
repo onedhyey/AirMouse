@@ -1,0 +1,18 @@
+#!/bin/zsh
+# Usage: airmouse run | calibrate | probe | buttontest | stop | log
+# Stops any running instance first (waiting until it is really gone), then launches a fresh one
+# with `open -n` so LaunchServices never reuses a dying instance and drops the arguments.
+APP="$(cd "$(dirname "$0")" && pwd)/build/AirMouse.app"
+LOG="$(cd "$(dirname "$0")" && pwd)/logs/airmouse.log"
+cmd=${1:-run}
+
+pkill -x AirMouse
+while pgrep -x AirMouse >/dev/null; do sleep 0.2; done
+
+case $cmd in
+  stop) echo "stopped" ;;
+  log) tail -f "$LOG" ;;
+  calibrate) open -n -W "$APP" --args calibrate && echo "calibration finished; start with: $0 run" ;;
+  run|probe|buttontest) open -n "$APP" --args "$cmd"; echo "started $cmd (stop: $0 stop)" ;;
+  *) echo "usage: $0 run|calibrate|probe|buttontest|stop|log"; exit 1 ;;
+esac
