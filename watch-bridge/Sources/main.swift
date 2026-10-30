@@ -23,12 +23,26 @@ let logURL = projectDir.appendingPathComponent("logs/airmouse.log")
 let configURL = projectDir.appendingPathComponent("config.json")
 let t0 = Date()
 
+let logMaxBytes: UInt64 = 2_000_000
+let stderrIsTTY = isatty(STDERR_FILENO) != 0
+
+/// Never throws or traps: the legacy FileHandle.write(_:) raises an ObjC exception on any I/O error
+/// (e.g. a full disk), which aborted the app after 12 h of use. Uses the throwing API and ignores failures.
 func log(_ s: String) {
-    let line = String(format: "%8.3f ", Date().timeIntervalSince(t0)) + s + "\n"
-    FileHandle.standardError.write(line.data(using: .utf8)!)
-    if let h = try? FileHandle(forWritingTo: logURL) {
-        h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); try? h.close()
+    let data = Data((String(format: "%8.3f ", Date().timeIntervalSince(t0)) + s + "\n").utf8)
+    if stderrIsTTY { try? FileHandle.standardError.write(contentsOf: data) }
+    guard let h = try? FileHandle(forWritingTo: logURL) else { return }
+    defer { try? h.close() }
+    guard let end = try? h.seekToEnd() else { return }
+    if end > logMaxBytes {   // rotate: keep one previous log
+        try? h.close()
+        let old = logURL.appendingPathExtension("1")
+        try? FileManager.default.removeItem(at: old)
+        try? FileManager.default.moveItem(at: logURL, to: old)
+        FileManager.default.createFile(atPath: logURL.path, contents: data)
+        return
     }
+    try? h.write(contentsOf: data)
 }
 
 extension Data {
@@ -310,7 +324,9 @@ final class WatchLink: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate 
         }
         let dt = Date().timeIntervalSince(statT)
         if dt >= 2 {
-            log(String(format: "raw stats: %.1f pkt/s, %.1f samples/s", Double(rawPackets) / dt, Double(rawSamples) / dt))
+            if verboseRaw || CommandLine.arguments.dropFirst().first == "probe" {
+                log(String(format: "raw stats: %.1f pkt/s, %.1f samples/s", Double(rawPackets) / dt, Double(rawSamples) / dt))
+            }
             rawPackets = 0; rawSamples = 0; statT = Date()
         }
     }
